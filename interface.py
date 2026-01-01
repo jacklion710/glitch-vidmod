@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import threading
 import glob
+import sys
 
 class ToolTip:
     """Create a tooltip for a widget"""
@@ -181,10 +182,13 @@ class VideoCorruptionInterface:
         
         # Processing state
         self.is_processing = False
+
+        # Viewer options
+        self.auto_open_viewer_after_preview = tk.BooleanVar(value=True)
+        self.last_preview_video = None
         
         # Button references for enabling/disabling
         self.preview_btn = None
-        self.approve_btn = None
         self.direct_batch_btn = None
         
         self.create_widgets()
@@ -354,6 +358,40 @@ class VideoCorruptionInterface:
                                    font=("Arial", 10))
         video_combo.pack(fill=tk.X, pady=5)
         
+        viewer_controls = tk.Frame(video_frame, bg=self.bg_color)
+        viewer_controls.pack(fill=tk.X, pady=(10, 0))
+
+        auto_open_check = tk.Checkbutton(
+            viewer_controls,
+            text="Auto-open viewer after preview",
+            variable=self.auto_open_viewer_after_preview,
+            bg=self.bg_color,
+            fg=self.text_color,
+            activebackground=self.bg_color,
+            activeforeground=self.text_color,
+            selectcolor=self.bg_color,
+            font=("Arial", 10),
+            padx=0,
+            pady=0,
+        )
+        auto_open_check.pack(side=tk.LEFT)
+        ToolTip(auto_open_check, "When enabled, the side-by-side viewer will open automatically after a preview finishes.")
+
+        open_viewer_container = tk.Frame(video_frame, bg=self.bg_color)
+        open_viewer_container.pack(fill=tk.X, pady=(10, 0))
+        self.open_viewer_btn = FlatButton(
+            open_viewer_container,
+            text="Open Viewer for Selected Video",
+            command=self.open_viewer_for_selected,
+            button_bg="#000000",
+            hover_bg="#111318",
+            border_color=self.text_color,
+            text_fg=self.text_color,
+            font=("Arial", 12, "bold"),
+            parent_bg=self.bg_color,
+        )
+        self.open_viewer_btn.pack(fill=tk.X)
+
         # Preview button container
         preview_container = tk.Frame(video_frame, bg=self.bg_color)
         preview_container.pack(fill=tk.X, pady=12)
@@ -376,24 +414,6 @@ class VideoCorruptionInterface:
         batch_frame = ttk.LabelFrame(self.root, text="Batch Processing", padding=15)
         batch_frame.pack(fill=tk.X, padx=15, pady=8)
         batch_frame.configure(style='TLabelframe')
-        
-        # Approve and batch button container
-        approve_container = tk.Frame(batch_frame, bg=self.bg_color)
-        approve_container.pack(fill=tk.X, pady=6)
-        
-        # Approve and batch button
-        self.approve_btn = FlatButton(
-            approve_container,
-            text="Approve & Process All Videos",
-            command=self.approve_and_batch,
-            button_bg="#000000",
-            hover_bg="#111318",
-            border_color=self.text_color,
-            text_fg=self.text_color,
-            font=("Arial", 12, "bold"),
-            parent_bg=self.bg_color,
-        )
-        self.approve_btn.pack(fill=tk.X)
         
         # Direct batch button container
         direct_batch_container = tk.Frame(batch_frame, bg=self.bg_color)
@@ -473,7 +493,10 @@ class VideoCorruptionInterface:
             if result.returncode == 0:
                 if is_preview:
                     self.log(f"✓ Preview complete: {os.path.basename(output_path)}")
-                    self.log("You can now view the preview in the viewer or approve to process all videos.")
+                    self.log("Opening the side-by-side viewer for this video (or use the Open Viewer button).")
+                    self.last_preview_video = video_name
+                    if self.auto_open_viewer_after_preview.get():
+                        self.root.after(0, lambda: self.open_viewer_for_video(video_name))
                 else:
                     self.log(f"✓ Processed: {video_name}")
             else:
@@ -482,24 +505,29 @@ class VideoCorruptionInterface:
             self.log(f"✗ Exception: {str(e)}")
         finally:
             self.is_processing = False
-    
-    def approve_and_batch(self):
-        """Approve current parameters and process all videos"""
-        if self.is_processing:
-            messagebox.showwarning("Warning", "Processing in progress. Please wait.")
+
+    def open_viewer_for_selected(self):
+        video_name = self.selected_video.get()
+        if not video_name:
+            messagebox.showerror("Error", "Please select a video first.")
             return
-        
-        response = messagebox.askyesno(
-            "Confirm Batch Process",
-            f"Process all videos with current parameters?\n\n"
-            f"Keyint: {self.keyint.get()}\n"
-            f"Keyint Min: {self.keyint_min.get()}\n"
-            f"Noise Amount: {self.noise_amount.get()}\n\n"
-            f"This will overwrite existing corrupted videos."
-        )
-        
-        if response:
-            self.process_all_videos(overwrite=True)
+        self.open_viewer_for_video(video_name)
+
+    def open_viewer_for_video(self, video_name: str):
+        """Launch the side-by-side viewer starting at the given video."""
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            view_script = os.path.join(script_dir, "view.py")
+            if not os.path.exists(view_script):
+                messagebox.showerror("Error", f"Viewer script not found: {view_script}")
+                return
+
+            # Use the filename; view.py strips extension to match the pair base name.
+            cmd = [sys.executable, view_script, "--video", video_name]
+            subprocess.Popen(cmd, cwd=script_dir)
+            self.log(f"Viewer opened for: {video_name}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open viewer: {e}")
     
     def direct_batch(self):
         """Directly process all videos without preview"""

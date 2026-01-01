@@ -7,9 +7,28 @@ Controls:
 """
 
 import os
+import argparse
 import cv2
 import glob
 import numpy as np
+
+# Runtime: O(N) to scan videos and build pairs, where N = number of files in vids/
+def parse_args():
+    parser = argparse.ArgumentParser(description="Side-by-side original vs corrupted video viewer")
+    parser.add_argument(
+        "--video",
+        type=str,
+        default=None,
+        help="Video filename or base name to start on (e.g. 'bball.mov' or 'bball')",
+    )
+    parser.add_argument(
+        "--paused",
+        action="store_true",
+        help="Start paused",
+    )
+    return parser.parse_args()
+
+args = parse_args()
 
 # Get all video files from vids directory
 video_extensions = ['*.mp4', '*.mov', '*.avi', '*.mkv', '*.m4v', '*.webm']
@@ -38,11 +57,23 @@ if not video_pairs:
 
 # Current state
 current_pair_index = 0
-is_playing = True
+is_playing = not args.paused
 original_cap = None
 corrupted_cap = None
 original_frame = None
 corrupted_frame = None
+
+# Runtime: O(N) where N = len(video_pairs)
+def find_pair_index(video_arg: str) -> int:
+    if not video_arg:
+        return 0
+    base = os.path.splitext(os.path.basename(video_arg))[0].strip()
+    if not base:
+        return 0
+    for i, pair in enumerate(video_pairs):
+        if pair.get("name") == base:
+            return i
+    return 0
 
 def load_video_pair(pair_index):
     global original_cap, corrupted_cap, original_frame, corrupted_frame
@@ -105,7 +136,13 @@ def combine_frames_side_by_side(orig_frame, corr_frame, max_width_per_video, max
     return combined
 
 # Load first video pair
-if not load_video_pair(0):
+current_pair_index = find_pair_index(args.video)
+if args.video and current_pair_index == 0:
+    requested = os.path.splitext(os.path.basename(args.video))[0]
+    if requested and video_pairs and video_pairs[0].get("name") != requested:
+        print(f"Requested video '{args.video}' not found in pairs. Starting at first pair.")
+
+if not load_video_pair(current_pair_index):
     print("Failed to load first video pair")
     exit(1)
 
