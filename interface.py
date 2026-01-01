@@ -149,6 +149,9 @@ class VideoCorruptionInterface:
         self.root.title("Video Corruption Interface")
         self.root.geometry("700x950")
         self.root.minsize(700, 900)
+
+        # Base directory for all relative paths (prevents accidental writes outside the project)
+        self.script_dir = os.path.dirname(os.path.abspath(__file__))
         
         # Dark theme colors (inky + distinct accents)
         self.bg_color = "#0b0d10"
@@ -223,15 +226,33 @@ class VideoCorruptionInterface:
         """Load list of video files from vids directory"""
         self.videos = []
         for ext in self.video_extensions:
-            video_paths = glob.glob(f'vids/{ext}')
+            video_paths = glob.glob(os.path.join(self.script_dir, 'vids', ext))
             for path in video_paths:
                 self.videos.append(os.path.basename(path))
         self.videos = sorted(self.videos)
     
+    def get_input_path(self, video_name: str) -> str:
+        """Get absolute input path for original video (vids/)."""
+        return os.path.join(self.script_dir, 'vids', video_name)
+
     def get_output_path(self, video_name):
-        """Get output path for corrupted video"""
+        """Get absolute output path for corrupted video (out/)."""
         base_name = os.path.splitext(video_name)[0]
-        return f'out/{base_name}_corrupted.mp4'
+        return os.path.join(self.script_dir, 'out', f'{base_name}_corrupted.mp4')
+
+    def validate_paths(self, input_path: str, output_path: str):
+        """Ensure we never overwrite originals in vids/ and only write into out/."""
+        input_abs = os.path.abspath(input_path)
+        output_abs = os.path.abspath(output_path)
+        vids_dir = os.path.abspath(os.path.join(self.script_dir, 'vids'))
+        out_dir = os.path.abspath(os.path.join(self.script_dir, 'out'))
+
+        if not input_abs.startswith(vids_dir + os.sep):
+            raise ValueError(f"Input path must be inside vids/: {input_abs}")
+        if not output_abs.startswith(out_dir + os.sep):
+            raise ValueError(f"Output path must be inside out/: {output_abs}")
+        if input_abs == output_abs:
+            raise ValueError("Input and output paths are identical; refusing to run.")
     
     def build_ffmpeg_command(self, input_path, output_path):
         """Build ffmpeg command with current parameters"""
@@ -466,7 +487,7 @@ class VideoCorruptionInterface:
             return
         
         video_name = self.selected_video.get()
-        input_path = f'vids/{video_name}'
+        input_path = self.get_input_path(video_name)
         output_path = self.get_output_path(video_name)
         
         if not os.path.exists(input_path):
@@ -485,6 +506,8 @@ class VideoCorruptionInterface:
     def process_video_thread(self, input_path, output_path, video_name, is_preview=False):
         """Process video in separate thread"""
         try:
+            os.makedirs(os.path.join(self.script_dir, 'out'), exist_ok=True)
+            self.validate_paths(input_path, output_path)
             cmd = self.build_ffmpeg_command(input_path, output_path)
             self.log(f"Running: {' '.join(cmd)}")
             
@@ -570,7 +593,7 @@ class VideoCorruptionInterface:
         # Process each video
         def batch_thread():
             for i, video_name in enumerate(self.videos, 1):
-                input_path = f'vids/{video_name}'
+                input_path = self.get_input_path(video_name)
                 output_path = self.get_output_path(video_name)
                 
                 if not os.path.exists(input_path):
