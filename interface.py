@@ -171,6 +171,12 @@ class VideoCorruptionInterface:
         # Default parameters
         self.keyint = tk.IntVar(value=10)
         self.keyint_min = tk.IntVar(value=10)
+        self.scenecut = tk.IntVar(value=0)
+        self.bframes = tk.IntVar(value=0)
+        self.ref_frames = tk.IntVar(value=1)
+        self.open_gop = tk.IntVar(value=0)
+        self.crf = tk.IntVar(value=18)
+        self.deblock_strength = tk.IntVar(value=0)
         self.noise_amount = tk.IntVar(value=3000)
         
         # Get video list
@@ -258,15 +264,26 @@ class VideoCorruptionInterface:
         """Build ffmpeg command with current parameters"""
         keyint = self.keyint.get()
         keyint_min = self.keyint_min.get()
+        scenecut = self.scenecut.get()
+        bframes = self.bframes.get()
+        ref_frames = self.ref_frames.get()
+        open_gop = self.open_gop.get()
+        crf = self.crf.get()
+        deblock_strength = self.deblock_strength.get()
         noise_amount = self.noise_amount.get()
         
-        x264_params = f'keyint={keyint}:keyint_min={keyint_min}:bframes=0'
+        x264_params = (
+            f'keyint={keyint}:keyint_min={keyint_min}:scenecut={scenecut}:'
+            f'bframes={bframes}:ref={ref_frames}:open_gop={open_gop}:'
+            f'deblock={deblock_strength}:{deblock_strength}'
+        )
         noise_filter = f'noise=amount={noise_amount}*not(key)'
         
         return [
             'ffmpeg', '-y', '-i', input_path,
             '-c:v', 'libx264',
             '-x264-params', x264_params,
+            '-crf', str(crf),
             '-bsf:v', noise_filter,
             '-pix_fmt', 'yuv420p',
             output_path
@@ -338,6 +355,150 @@ class VideoCorruptionInterface:
                                 "Must be less than or equal to keyint.\n"
                                 "Affects the minimum spacing of corruption artifacts.\n"
                                 "Range: 1-300 frames")
+
+        # Scenecut parameter
+        scenecut_frame = tk.Frame(params_frame, bg=self.frame_bg)
+        scenecut_frame.pack(fill=tk.X, pady=8)
+        scenecut_label = tk.Label(scenecut_frame, text="Scene Cut Sensitivity (scenecut):",
+                                  bg=self.frame_bg, fg=self.text_color,
+                                  font=("Arial", 11))
+        scenecut_label.pack(side=tk.LEFT)
+        scenecut_spin = tk.Spinbox(scenecut_frame, from_=0, to=100, textvariable=self.scenecut,
+                                   width=12, bg=self.input_bg, fg=self.text_color,
+                                   insertbackground=self.text_color,
+                                   buttonbackground=self.accent_color,
+                                   selectbackground=self.accent_color,
+                                   selectforeground="white",
+                                   font=("Arial", 11, "bold"),
+                                   relief=tk.FLAT, borderwidth=2,
+                                   highlightthickness=1, highlightbackground=self.accent_color)
+        scenecut_spin.pack(side=tk.RIGHT)
+        ToolTip(scenecut_label, "Controls how aggressively x264 inserts new keyframes at scene cuts.\n"
+                               "Lower values reduce scene-cut I-frames, increasing cross-scene smearing.\n"
+                               "Range: 0-100")
+        ToolTip(scenecut_spin, "Controls how aggressively x264 inserts new keyframes at scene cuts.\n"
+                              "Lower values reduce scene-cut I-frames, increasing cross-scene smearing.\n"
+                              "Range: 0-100")
+
+        # B-frames parameter
+        bframes_frame = tk.Frame(params_frame, bg=self.frame_bg)
+        bframes_frame.pack(fill=tk.X, pady=8)
+        bframes_label = tk.Label(bframes_frame, text="B-frames (bframes):",
+                                 bg=self.frame_bg, fg=self.text_color,
+                                 font=("Arial", 11))
+        bframes_label.pack(side=tk.LEFT)
+        bframes_spin = tk.Spinbox(bframes_frame, from_=0, to=16, textvariable=self.bframes,
+                                  width=12, bg=self.input_bg, fg=self.text_color,
+                                  insertbackground=self.text_color,
+                                  buttonbackground=self.accent_color,
+                                  selectbackground=self.accent_color,
+                                  selectforeground="white",
+                                  font=("Arial", 11, "bold"),
+                                  relief=tk.FLAT, borderwidth=2,
+                                  highlightthickness=1, highlightbackground=self.accent_color)
+        bframes_spin.pack(side=tk.RIGHT)
+        ToolTip(bframes_label, "Number of B-frames between reference frames.\n"
+                              "Higher values can increase temporal smearing.\n"
+                              "Range: 0-16")
+        ToolTip(bframes_spin, "Number of B-frames between reference frames.\n"
+                             "Higher values can increase temporal smearing.\n"
+                             "Range: 0-16")
+
+        # Reference frames parameter
+        ref_frame = tk.Frame(params_frame, bg=self.frame_bg)
+        ref_frame.pack(fill=tk.X, pady=8)
+        ref_label = tk.Label(ref_frame, text="Reference Frames (ref):",
+                             bg=self.frame_bg, fg=self.text_color,
+                             font=("Arial", 11))
+        ref_label.pack(side=tk.LEFT)
+        ref_spin = tk.Spinbox(ref_frame, from_=1, to=16, textvariable=self.ref_frames,
+                              width=12, bg=self.input_bg, fg=self.text_color,
+                              insertbackground=self.text_color,
+                              buttonbackground=self.accent_color,
+                              selectbackground=self.accent_color,
+                              selectforeground="white",
+                              font=("Arial", 11, "bold"),
+                              relief=tk.FLAT, borderwidth=2,
+                              highlightthickness=1, highlightbackground=self.accent_color)
+        ref_spin.pack(side=tk.RIGHT)
+        ToolTip(ref_label, "Number of reference frames used for prediction.\n"
+                          "Higher values can increase motion drag and ghosting.\n"
+                          "Range: 1-16")
+        ToolTip(ref_spin, "Number of reference frames used for prediction.\n"
+                         "Higher values can increase motion drag and ghosting.\n"
+                         "Range: 1-16")
+
+        # Open GOP parameter
+        open_gop_frame = tk.Frame(params_frame, bg=self.frame_bg)
+        open_gop_frame.pack(fill=tk.X, pady=8)
+        open_gop_label = tk.Label(open_gop_frame, text="Open GOP (open_gop):",
+                                  bg=self.frame_bg, fg=self.text_color,
+                                  font=("Arial", 11))
+        open_gop_label.pack(side=tk.LEFT)
+        open_gop_spin = tk.Spinbox(open_gop_frame, from_=0, to=1, textvariable=self.open_gop,
+                                   width=12, bg=self.input_bg, fg=self.text_color,
+                                   insertbackground=self.text_color,
+                                   buttonbackground=self.accent_color,
+                                   selectbackground=self.accent_color,
+                                   selectforeground="white",
+                                   font=("Arial", 11, "bold"),
+                                   relief=tk.FLAT, borderwidth=2,
+                                   highlightthickness=1, highlightbackground=self.accent_color)
+        open_gop_spin.pack(side=tk.RIGHT)
+        ToolTip(open_gop_label, "Allow frames to reference across GOP boundaries.\n"
+                               "Enabled (1) increases cross-GOP corruption.\n"
+                               "Range: 0-1")
+        ToolTip(open_gop_spin, "Allow frames to reference across GOP boundaries.\n"
+                              "Enabled (1) increases cross-GOP corruption.\n"
+                              "Range: 0-1")
+
+        # CRF parameter
+        crf_frame = tk.Frame(params_frame, bg=self.frame_bg)
+        crf_frame.pack(fill=tk.X, pady=8)
+        crf_label = tk.Label(crf_frame, text="Quality (CRF):",
+                             bg=self.frame_bg, fg=self.text_color,
+                             font=("Arial", 11))
+        crf_label.pack(side=tk.LEFT)
+        crf_spin = tk.Spinbox(crf_frame, from_=0, to=51, textvariable=self.crf,
+                              width=12, bg=self.input_bg, fg=self.text_color,
+                              insertbackground=self.text_color,
+                              buttonbackground=self.accent_color,
+                              selectbackground=self.accent_color,
+                              selectforeground="white",
+                              font=("Arial", 11, "bold"),
+                              relief=tk.FLAT, borderwidth=2,
+                              highlightthickness=1, highlightbackground=self.accent_color)
+        crf_spin.pack(side=tk.RIGHT)
+        ToolTip(crf_label, "Constant Rate Factor (lower = higher quality).\n"
+                          "Higher values increase blockiness and artifacts.\n"
+                          "Range: 0-51")
+        ToolTip(crf_spin, "Constant Rate Factor (lower = higher quality).\n"
+                         "Higher values increase blockiness and artifacts.\n"
+                         "Range: 0-51")
+
+        # Deblock parameter
+        deblock_frame = tk.Frame(params_frame, bg=self.frame_bg)
+        deblock_frame.pack(fill=tk.X, pady=8)
+        deblock_label = tk.Label(deblock_frame, text="Deblock Strength:",
+                                 bg=self.frame_bg, fg=self.text_color,
+                                 font=("Arial", 11))
+        deblock_label.pack(side=tk.LEFT)
+        deblock_spin = tk.Spinbox(deblock_frame, from_=-6, to=6, textvariable=self.deblock_strength,
+                                  width=12, bg=self.input_bg, fg=self.text_color,
+                                  insertbackground=self.text_color,
+                                  buttonbackground=self.accent_color,
+                                  selectbackground=self.accent_color,
+                                  selectforeground="white",
+                                  font=("Arial", 11, "bold"),
+                                  relief=tk.FLAT, borderwidth=2,
+                                  highlightthickness=1, highlightbackground=self.accent_color)
+        deblock_spin.pack(side=tk.RIGHT)
+        ToolTip(deblock_label, "Adjust deblocking filter strength.\n"
+                              "Negative values emphasize block edges; positive smooths them.\n"
+                              "Range: -6 to 6")
+        ToolTip(deblock_spin, "Adjust deblocking filter strength.\n"
+                             "Negative values emphasize block edges; positive smooths them.\n"
+                             "Range: -6 to 6")
         
         # Noise amount parameter
         noise_frame = tk.Frame(params_frame, bg=self.frame_bg)
@@ -495,7 +656,14 @@ class VideoCorruptionInterface:
             return
         
         self.log(f"Starting preview for: {video_name}")
-        self.log(f"Parameters: keyint={self.keyint.get()}, keyint_min={self.keyint_min.get()}, noise={self.noise_amount.get()}")
+        self.log(
+            "Parameters: "
+            f"keyint={self.keyint.get()}, keyint_min={self.keyint_min.get()}, "
+            f"scenecut={self.scenecut.get()}, bframes={self.bframes.get()}, "
+            f"ref={self.ref_frames.get()}, open_gop={self.open_gop.get()}, "
+            f"crf={self.crf.get()}, deblock={self.deblock_strength.get()}, "
+            f"noise={self.noise_amount.get()}"
+        )
         
         self.is_processing = True
         thread = threading.Thread(target=self.process_video_thread, 
@@ -620,4 +788,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
