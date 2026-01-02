@@ -274,7 +274,7 @@ class VideoCorruptionInterface:
         
         x264_params = (
             f'keyint={keyint}:keyint_min={keyint_min}:scenecut={scenecut}:'
-            f'bframes={bframes}:ref={ref_frames}:open_gop={open_gop}:'
+            f'bframes={bframes}:ref={ref_frames}:open-gop={open_gop}:'
             f'deblock={deblock_strength}:{deblock_strength}'
         )
         noise_filter = f'noise=amount={noise_amount}*not(key)'
